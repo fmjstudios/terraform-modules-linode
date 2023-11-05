@@ -1,0 +1,115 @@
+#cloud-config
+
+package_update: true
+
+users:
+${users}
+
+ssh_pwauth: ${enable_ssh_pwauth}
+chpasswd:
+  expire: ${pwauth_expire_passwds}
+  users:
+    ${chpasswd_users}
+
+timezone: ${timezone}
+locale: ${locale}
+preserve_hostname: ${preserve_hostname}
+hostname: ${hostname}
+fqdn: ${fqdn}
+prefer_fqdn_over_hostname: ${prefer_fqdn_over_hostname}
+manage_etc_hosts: ${prefer_fqdn_over_hostname}
+
+write_files:
+  - path: /etc/ssh/sshd_config
+    content: |
+      Port ${ssh_port}
+      AddressFamily any
+      ListenAddress ${ssh_listen_address}
+      ListenAddress ::
+      Protocol 2
+      HostKey /etc/ssh/ssh_host_rsa_key
+      HostKey /etc/ssh/ssh_host_dsa_key
+      HostKey /etc/ssh/ssh_host_ecdsa_key
+      SyslogFacility AUTH
+      LogLevel ${ssh_log_level}
+      LoginGraceTime 2m
+      StrictModes yes
+      MaxAuthTries 6
+      MaxSessions 10
+      PubkeyAuthentication yes
+      AuthorizedKeysFile .ssh/authorized_keys
+      AuthorizedPrincipalsFile none
+      AuthorizedKeysCommand none
+      AuthorizedKeysCommandUser nobody
+      HostbasedAuthentication no
+      IgnoreUserKnownHosts no
+      IgnoreRhosts yes
+      PasswordAuthentication no
+      ChallengeResponseAuthentication no
+      KerberosAuthentication no
+      KerberosOrLocalPasswd yes
+      KerberosTicketCleanup yes
+      GSSAPIAuthentication no
+      GSSAPICleanupCredentials yes
+      UsePAM yes
+      AllowAgentForwarding yes
+      AllowTcpForwarding yes
+      GatewayPorts no
+      X11Forwarding no
+      X11DisplayOffset 10
+      X11UseLocalhost yes
+      PrintMotd no
+      PrintLastLog yes
+      TCPKeepAlive yes
+      PermitUserEnvironment yes
+      Compression yes
+      ClientAliveInterval 120
+      ClientAliveCountMax 300
+      UseDNS yes
+      PidFile /run/sshd.pid
+      MaxStartups 10:30:100
+      PermitTunnel no
+      ChrootDirectory none
+      VersionAddendum none
+      Banner none
+      Subsystem sftp /usr/lib/sftp-server
+      PermitEmptyPasswords no
+      PermitRootLogin no
+      AllowUsers ${ssh_allow_users}
+      AllowGroups ${ssh_allow_groups}
+  - path: /etc/sysctl.conf
+    permissions: "0644"
+    owner: root
+    content: |
+      net.ipv6.conf.all.disable_ipv6 = 1
+      net.ipv6.conf.default.disable_ipv6 = 1
+      net.ipv6.conf.lo.disable_ipv6 = 1
+  - path: /etc/systemd/resolved.conf.d/dns_servers.conf
+    permissions: "0644"
+    owner: root
+    content: |
+      [Resolve]
+      DNS=1.1.1.1 8.8.8.8 8.8.4.4
+      Domains=~.
+  - path: /etc/systemd/resolved.conf.d/fallback_dns_servers.conf
+    permissions: "0644"
+    owner: root
+    content: |
+      [Resolve]
+      FallbackDNS=161.97.189.51 161.97.189.52 127.0.0.1 ::1
+
+runcmd:
+  - systemctl restart sshd
+  - sysctl -p
+  - resolvectl dns eth0 1.1.1.1 8.8.8.8 8.8.4.4
+  - systemctl daemon-reload
+  - systemctl restart systemd-networkd
+  - systemctl restart systemd-resolved
+  - ufw --force reset
+  - ufw enable
+  - ufw allow ${ssh_port}
+
+power_state:
+  delay: 1
+  mode: reboot
+  message: Rebooting server after completing cloud-init configuration
